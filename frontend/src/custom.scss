@@ -1,0 +1,31 @@
+@import "../node_modules/bootstrap/scss/functions";
+@import "../node_modules/bootstrap/scss/variables";
+@import "../node_modules/bootstrap/scss/maps";
+@import "../node_modules/bootstrap/scss/mixins";
+
+$white: #f6fbff;
+$mist: rgba(255, 255, 255, 0.95);
+$translucentWhite: #6b7c93;
+$blue: #007bff;
+$skyBlue: #0056b3;
+$neonMint: #00ffbf;
+$orange: #ff5f56;
+$yellow: #ffbd2e;
+$green: #27c93f;
+$dark: #212529;
+
+$custom_colors: (
+  "white": $white,
+  "mist": $mist,
+  "translucentWhite": $translucentWhite,
+  "blue": $blue,
+  "skyBlue": $skyBlue,
+  "neonMint": $neonMint,
+  "orange": $orange,
+  "yellow": $yellow,
+  "green": $green,
+);
+
+$theme-colors: map-merge($theme-colors, $custom_colors);
+
+@import "../node_modules/bootstrap/scss/bootstrap";
