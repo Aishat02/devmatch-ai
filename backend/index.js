@@ -1,7 +1,7 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
-import { apiErrors, stringCodes } from "./errorHandler.js.js";
+import { apiErrors, stringCodes } from "./errorHandler.js";
 
 const app = express();
 app.use(cors());
