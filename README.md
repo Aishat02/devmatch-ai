@@ -67,5 +67,5 @@ We’re open to contributions! 😄 Feel free to submit issues, feature requests
 
 We’re here to help!
 
-- **GitHub**: [aishat02](https://github.com/your-username)
+- **GitHub**: [aishat02](https://github.com/Aishat02)
 - **Email**: [titilayotijani15@gmail.com](mailto:titilayotijani15@gmail.com)

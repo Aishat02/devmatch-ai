@@ -16,5 +16,5 @@ Built with React, this is the section that contains the user interface where use
 
 If you need help or just want to chat, don’t hesitate to reach out:
 
-- **GitHub**: [aishat02](https://github.com/your-username)
+- **GitHub**: [aishat02](https://github.com/Aishat02)
 - **Email**: [titilayotijani15@gmail.com](mailto:titilayotijani15@gmail.com)

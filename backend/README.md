@@ -21,5 +21,5 @@ Errors are handled beautifully so you won’t be left in the dark. If something 
 
 Got any questions? Reach out to us!
 
-- **GitHub**: [aishat02](https://github.com/your-username)
+- **GitHub**: [aishat02](https://github.com/Aishat02)
 - **Email**: [titilayotijani15@gmail.com](mailto:titilayotijani15@gmail.com)
