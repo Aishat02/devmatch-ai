@@ -23,9 +23,8 @@ const Form = () => {
 
   const onSubmit = async (data: Profile) => {
     setIsLoading(true);
-    console.log(data);
     try {
-      const response = await fetch("http://localhost:3173/api/analyze", {
+      const response = await fetch("https://devmatch-ai.vercel.app/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -37,7 +36,7 @@ const Form = () => {
         setIsLoading(false);
         throw new Error(`❌ ${result.message}`);
       }
-
+      
       navigate("/profile", {
         state: { result, username: data.githubUsername },
       });
