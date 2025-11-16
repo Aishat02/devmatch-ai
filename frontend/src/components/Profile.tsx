@@ -29,7 +29,7 @@ export const Profile = () => {
       } else {
         clearInterval(interval);
       }
-    }, 2000);
+    }, 800);
 
     return () => clearInterval(interval);
   }, [username, result, navigate]);
