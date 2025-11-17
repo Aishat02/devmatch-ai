@@ -2,6 +2,7 @@
 @import "../node_modules/bootstrap/scss/variables";
 @import "../node_modules/bootstrap/scss/maps";
 @import "../node_modules/bootstrap/scss/mixins";
+@import "../node_modules/bootstrap/scss/utilities";
 
 $white: #f6fbff;
 $mist: rgba(255, 255, 255, 0.95);
@@ -27,5 +28,13 @@ $custom_colors: (
 );
 
 $theme-colors: map-merge($theme-colors, $custom_colors);
+
+$utilities: (
+  "background-color": (
+    property: background-color,
+    class: bg,
+    values: map-merge($theme-colors, $custom-colors),
+  ),
+);
 
 @import "../node_modules/bootstrap/scss/bootstrap";
