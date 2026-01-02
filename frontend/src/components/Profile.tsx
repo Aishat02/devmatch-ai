@@ -16,7 +16,7 @@ export const Profile = () => {
       `>> 👤 Username: ${username} `,
       `>> 📄 Bio: ${result.bio || "No bio"} `,
       `>> 👥 Followers: ${result.followers || 0} `,
-      `>> 📂 Top Repositories:\n${result.repoSummary || "N/A"}`,
+      `>> 📂 Top Repositories:\n${result.topRepos || "N/A"}`,
       `${result.aiText || "N/A"}`,
     ];
 

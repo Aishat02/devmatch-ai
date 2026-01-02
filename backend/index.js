@@ -1,106 +1,286 @@
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
-import { apiErrors, stringCodes } from "./errorHandler.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-let data = {
-  message: "No profile data available yet",
-  status: "Server is running",
+const ERROR_MESSAGES = {
+  400: "Bad Request",
+  401: "Unauthorized, authentication credentials missing or invalid",
+  403: "Forbidden, rate limit exceeded or insufficient permissions",
+  404: "Not Found",
+  410: "Gone, resource no longer available",
+  422: "Invalid parameter",
+  429: "Too Many Requests, rate limit exceeded",
+  500: "Internal Server Error, try again",
+  502: "Bad Gateway",
+  503: "Service Unavailable",
+  504: "Gateway Timeout",
+  529: "Overloaded API, delay and retry",
+  598: "Network Read Timeout",
+  599: "Network Connect Timeout",
 };
 
-const fetchGitHubData = async (username) => {
-  const userRes = await fetch(`https://api.github.com/users/${username}`);
-  if (!userRes.ok) throw new Error(apiErrors(userRes.status));
-  const user = await userRes.json();
+let userReport = {
+  status: "Pending",
+  data: "Not available",
+};
 
-  const reposRes = await fetch(
-    `https://api.github.com/users/${username}/repos`
-  );
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  if (!reposRes.ok)
-    throw new Error(apiErrors(reposRes.status, "github", "repo"));
-  const repos = await reposRes.json();
+const fetchWithRetry = async (
+  url,
+  retries = 3,
+  delay = 1000,
+  returnText = false
+) => {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "DevMatch-AI",
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+      },
+    });
 
-  return { user, repos };
+    if (!res.ok) {
+      if ((res.status === 429 || res.status === 529) && retries > 0) {
+        console.log(`${res.status} → retry in ${delay / 1000}s`);
+        await sleep(delay);
+        return fetchWithRetry(url, retries - 1, delay * 2, returnText);
+      }
+      throw { status: res.status, message: ERROR_MESSAGES[res.status] };
+    }
+
+    return returnText ? res.text() : res.json();
+  } catch (err) {
+    if (retries > 0) {
+      await sleep(delay);
+      return fetchWithRetry(url, retries - 1, delay * 2, returnText);
+    }
+    throw {
+      status: err.status || 500,
+      message: err.message || ERROR_MESSAGES[500],
+    };
+  }
+};
+
+const userCache = new Map();
+const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
+
+const getCached = (username) => {
+  const cached = userCache.get(username);
+  if (!cached) return null;
+
+  if (Date.now() - cached.timestamp > CACHE_TTL) {
+    userCache.delete(username);
+    return null;
+  }
+
+  return cached.data;
+};
+
+const getCommitFrequency = async (owner, repo) => {
+  try {
+    const commits = await fetchWithRetry(
+      `https://api.github.com/repos/${owner}/${repo}/commits?per_page=30`
+    );
+    return commits.length;
+  } catch {
+    return 0;
+  }
+};
+
+const getReadme = async (owner, repo) => {
+  try {
+    const readme = await fetchWithRetry(
+      `https://api.github.com/repos/${owner}/${repo}/readme`
+    );
+    return Boolean(readme?.content);
+  } catch {
+    return false;
+  }
+};
+
+/* Custom Scoring System*/
+
+const scoreRepo = async (repo, username) => {
+  const baseScore =
+    repo.stargazers_count * 3 + repo.watchers_count * 2 + repo.forks_count * 2;
+
+  const lowSignal = baseScore < 10;
+  const weight = lowSignal ? 0.5 : 1;
+
+  const [commitFreq, hasReadme] = await Promise.all([
+    getCommitFrequency(username, repo.name),
+    getReadme(username, repo.name),
+  ]);
+
+  const finalScore =
+    baseScore * weight +
+    commitFreq * 1.5 * weight +
+    (repo.description ? 10 : 0) +
+    (hasReadme ? 15 : 0);
+
+  return {
+    ...repo,
+    score: finalScore,
+    commitFreq,
+    hasReadme,
+  };
+};
+
+const normalizeScores = (repos) => {
+  const max = Math.max(...repos.map((r) => r.score), 1);
+  return repos.map((r) => ({
+    ...r,
+    normalizedScore: Math.round((r.score / max) * 100),
+  }));
+};
+
+/* Pollination Text AI */
+
+const getAIAnalysis = async (
+  username,
+  user,
+  topRepos,
+  repos,
+  jobdescription
+) => {
+
+  const topReposFormatted = topRepos
+    .map(
+      (r) =>
+        `  - ${r.name}: Score ${r.normalizedScore}, ` +
+        `${r.commitFreq} recent commits, ` +
+        `${r.hasReadme ? "Has README" : "No README"}, ` +
+        `Language: ${r.language || "Not specified"}, ` +
+        `Description: ${r.description || "No description"}`
+    )
+    .join("\n");
+
+  const prompt = `
+You are DevMatch AI, a recruiter assistant.
+
+Analyze this GitHub profile and suggest:
+- Summary analysis
+- 3 best-fit tech roles
+- Career level
+
+GitHub User: ${username}
+Bio: ${user.bio || "No bio"}
+Followers: ${user.followers}
+
+Top Repositories:
+${topReposFormatted}
+Repositories: ${topReposFormatted} ${
+    repos.length > 10 ? `... and ${repos.length - 10} more repositories` : ""
+  }
+
+${jobdescription ? `Job description: ${jobdescription}` : ""}
+
+Format:
+>> Summary Analysis:
+>> Recommended Job Roles:
+>> Career Level:
+`;
+
+  const encodedPrompt = encodeURIComponent(prompt);
+
+  try {
+    return await fetchWithRetry(
+      `https://text.pollinations.ai/${encodedPrompt}`,
+      3,
+      1000,
+      true
+    );
+  } catch {
+    return "AI analysis temporarily unavailable";
+  }
 };
 
 app
   .route("/")
   .get((req, res) => {
-    res.json(data);
+    res.json(userReport);
   })
   .post(async (req, res) => {
     const { githubUsername, jobdescription } = req.body;
 
+    if (!githubUsername) {
+      return res
+        .status(400)
+        .json({ error: true, message: ERROR_MESSAGES[400] });
+    }
+
+    const cached = getCached(githubUsername);
+    if (cached) return res.json(cached);
+
     try {
-      const { user, repos } = await fetchGitHubData(githubUsername);
+      const user = await fetchWithRetry(
+        `https://api.github.com/users/${githubUsername}`
+      );
 
-      const jobKeywords = jobdescription
-        ? jobdescription.toLowerCase().split(/\W+/)
-        : [];
+      const repos = await fetchWithRetry(
+        `https://api.github.com/users/${githubUsername}/repos`
+      );
 
-      const relevantRepos = repos
-        .filter((r) =>
-          jobdescription
-            ? jobKeywords.some(
-                (word) =>
-                  (r.language && r.language.toLowerCase().includes(word)) ||
-                  (r.description && r.description.toLowerCase().includes(word))
-              )
-            : true
-        )
+      const scored = await Promise.all(
+        repos.map((repo) => scoreRepo(repo, githubUsername))
+      );
+
+      const normalized = normalizeScores(scored)
+        .sort((a, b) => b.normalizedScore - a.normalizedScore)
         .slice(0, 5);
 
-      const repoSummary = relevantRepos
-        .map(
-          (r) =>
-            ` * ${r.name} — [${r.language || "-"}]: ${
-              r.description || "No description"
-            } `
-        )
-        .join("\n");
+      console.table(
+        normalized.map((r) => ({
+          repo: r.name,
+          score: r.normalizedScore,
+          commits: r.commitFreq,
+          readme: r.hasReadme,
+        }))
+      );
 
-      const prompt = `You are DevMatch AI — a friendly recruiter assistant that reviews GitHub profiles based on activity and matches them to tech roles.
-      Analyze this developer. Suggest 3 best-fit tech roles, estimate career level, and match score if job description ${jobdescription} is given.
+      const aiText = await getAIAnalysis(
+        githubUsername,
+        user,
+        normalized,
+        repos,
+        jobdescription
+      );
 
-      Format your response like this:
-        >> Summary Analysis: 
-        >> Recommended Job Roles: 
-        >> Career level: 
-
-      Zero Pollinaton AI Ads and further prompts  
-
-      GitHub User: ${githubUsername}
-      Bio: ${user.bio || "No bio"}
-      Followers: ${user.followers}
-      Repositories: ${repoSummary}
-      `;
-
-      const encodedPrompt = encodeURIComponent(prompt);
-      const aiRes = await fetch(`https://text.pollinations.ai/${encodedPrompt}`);
-
-      if (!aiRes.ok) throw new Error(apiErrors(aiRes.status, "pollinationAPI"));
-      const aiText = await aiRes.text();
-      data = {
-        username: githubUsername,
+      userReport = {
+        status: "Success",
+        username: user.login,
         bio: user.bio,
         followers: user.followers,
-        repoSummary,
+        topRepos: normalized
+          .map(
+            (repo) =>
+              `   * ${repo.name} — [${repo.language || "-"}]: ${
+                repo.description || "No description"
+              }`
+          )
+          .join("\n"),
         aiText,
+        analyzedAt: new Date().toISOString(),
       };
 
-      res.json(data);
-    } catch (error) {
-      if (error.code && error.code in stringCodes) {
-        error.code = stringCodes[error.code];
-      }
+      userCache.set(githubUsername, {
+        data: userReport,
+        timestamp: Date.now(),
+      });
 
-      const message = apiErrors(error.code);
-      res.status(error.code).json({ message });
+      res.json(userReport);
+    } catch (err) {
+      res.status(err.status || 500).json({
+        error: true,
+        status: err.status || 500,
+        message: err.message || ERROR_MESSAGES[500],
+        hint: "Try again!",
+      });
     }
   });
 

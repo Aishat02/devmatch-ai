@@ -23,6 +23,8 @@ const Form = () => {
 
   const onSubmit = async (data: Profile) => {
     setIsLoading(true);
+    console.log("📤 Sending request for:", data.githubUsername);
+
     try {
       const response = await fetch("https://devmatch-server.vercel.app/", {
         method: "POST",
@@ -30,11 +32,13 @@ const Form = () => {
         body: JSON.stringify(data),
       });
 
+      console.log("📥 Response status:", response.status);
       const result = await response.json();
+      console.log("📥 Response data:", result);
 
       if (!response.ok) {
         setIsLoading(false);
-        throw new Error(`❌ ${result.message}`);
+        throw result;
       }
 
       navigate("/profile", {
@@ -42,7 +46,13 @@ const Form = () => {
       });
     } catch (err: any) {
       setIsLoading(false);
-      alert(`${err.message}`);
+
+      if (err instanceof TypeError) {
+        alert("Network error. Check your internet connection.");
+        return;
+      }
+
+      alert(`${err.message}. ${err.hint}`);
     }
   };
 
@@ -97,7 +107,11 @@ const Form = () => {
       <div className="mb-3 text-end fs-12 text-muted">
         {characterLength} characters left
       </div>
-      <button type="submit" className="btn btn-primary w-100">
+      <button
+        type="submit"
+        className="btn btn-primary w-100"
+        disabled={isLoading}
+      >
         {isLoading ? (
           <>
             <span role="status">Analyzing...</span>{" "}
@@ -110,6 +124,12 @@ const Form = () => {
           "Analyze Profile"
         )}
       </button>
+
+      {isLoading && (
+        <div className="mt-3 text-center text-muted">
+          <small>Fetching GitHub data... This may take a moment.</small>
+        </div>
+      )}
     </form>
   );
 };
